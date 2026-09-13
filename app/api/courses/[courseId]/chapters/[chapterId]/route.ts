@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildVideoUrls, destroyAsset } from "@/lib/cloudinary";
 import { isChapterKind } from "@/lib/chapter-kind";
+import { parseYoutubeId } from "@/lib/youtube";
 import { db } from "@/lib/db";
 
 interface PatchRequest {
@@ -12,6 +13,8 @@ interface PatchRequest {
   videoPublicId?: string;
   videoDuration?: number;
   kind?: string;
+  /** A YouTube link for this part; an empty string removes it. */
+  youtubeUrl?: string;
   /** Marks into the course's source recording, in seconds. */
   startSeconds?: number | null;
   endSeconds?: number | null;
@@ -123,6 +126,7 @@ export async function PATCH(
       startSeconds,
       endSeconds,
       kind,
+      youtubeUrl,
       ...values
     }: PatchRequest = await req.json();
 
@@ -135,7 +139,27 @@ export async function PATCH(
      * slice of the course recording. Whichever the teacher just chose wins,
      * and the other is cleared so playback is never ambiguous.
      */
-    const timing: { startSeconds?: number | null; endSeconds?: number | null } = {};
+    const timing: {
+      startSeconds?: number | null;
+      endSeconds?: number | null;
+      youtubeId?: string | null;
+    } = {};
+
+    // A YouTube link is the part's own video, so it retires any upload —
+    // but keeps the timestamps, which apply to it just the same.
+    if (youtubeUrl !== undefined) {
+      if (youtubeUrl === "" || youtubeUrl === null) {
+        timing.youtubeId = null;
+      } else {
+        const youtubeId = parseYoutubeId(String(youtubeUrl));
+        if (!youtubeId) {
+          return NextResponse.json({ error: "لينك يوتيوب مش صحيح" }, { status: 400 });
+        }
+        timing.youtubeId = youtubeId;
+        await removeExistingVideo(params.chapterId);
+        values.videoUrl = null as unknown as string;
+      }
+    }
 
     if (startSeconds !== undefined || endSeconds !== undefined) {
       const from = startSeconds === null ? null : Number(startSeconds);
@@ -157,17 +181,29 @@ export async function PATCH(
       timing.startSeconds = from;
       timing.endSeconds = to;
 
-      // Switching a part to a clip drops the file it used to carry.
-      if (from !== null) {
+      // Marks on the course recording replace the part's own file; marks
+      // on the part's own YouTube video just narrow it.
+      const ownYoutube =
+        timing.youtubeId !== undefined
+          ? timing.youtubeId
+          : (
+              await db.chapter.findUnique({
+                where: { id: params.chapterId },
+                select: { youtubeId: true },
+              })
+            )?.youtubeId;
+
+      if (from !== null && !ownYoutube) {
         await removeExistingVideo(params.chapterId);
         values.videoUrl = null as unknown as string;
       }
     }
 
-    // A fresh upload replaces any clip marks.
+    // A fresh upload replaces any clip marks and any YouTube link.
     if (videoPublicId && values.videoUrl) {
       timing.startSeconds = null;
       timing.endSeconds = null;
+      timing.youtubeId = null;
     }
 
     // Update the chapter in the database

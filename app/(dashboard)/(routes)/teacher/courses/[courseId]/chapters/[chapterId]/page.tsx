@@ -71,7 +71,7 @@ const page = async ({
     : [
         chapter.title,
         chapter.description,
-        chapter.videoUrl || chapter.startSeconds !== null,
+        chapter.videoUrl || chapter.youtubeId || chapter.startSeconds !== null,
       ];
 
   const totalFields = requiredFields.length;
@@ -171,7 +171,7 @@ const page = async ({
                   sourceVideoThumb={course?.sourceVideoThumb ?? null}
                   sourceVideoDuration={course?.sourceVideoDuration ?? null}
                   sourceYoutubeId={course?.sourceYoutubeId ?? null}
-                  hasOwnVideo={Boolean(chapter.videoUrl)}
+                  hasOwnVideo={Boolean(chapter.videoUrl || chapter.youtubeId)}
                 />
               </>
             )}

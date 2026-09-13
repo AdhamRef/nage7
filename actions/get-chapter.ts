@@ -94,10 +94,26 @@ const getChapter = async ({ userId, courseId, chapterId }: GetChapterProps) => {
     const isClip =
       !videoData &&
       !chapter.videoUrl &&
+      !chapter.youtubeId &&
       hasSource &&
       chapter.startSeconds !== null;
 
-    const playback = isClip
+    /**
+     * Precedence: the part's own YouTube link, then its own upload, then a
+     * slice of the course recording. The timestamps travel with a YouTube
+     * link so one long video can serve several parts.
+     */
+    const playback = chapter.youtubeId
+      ? {
+          youtubeId: chapter.youtubeId,
+          hlsUrl: null,
+          playbackUrl: null,
+          originalUrl: null,
+          thumbnailUrl: null,
+          startSeconds: chapter.startSeconds,
+          endSeconds: chapter.endSeconds,
+        }
+      : isClip
       ? {
           youtubeId: course.sourceYoutubeId,
           hlsUrl: course.sourceVideoHlsUrl,

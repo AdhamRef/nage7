@@ -39,6 +39,7 @@ export async function PATCH(
       !chapter.description ||
       (chapter.kind === "LESSON" &&
         !chapter.videoUrl &&
+        !chapter.youtubeId &&
         chapter.startSeconds === null)
     ) {
       return new NextResponse("Missing Required Fields", { status: 400 });

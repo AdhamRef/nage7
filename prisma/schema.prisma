@@ -67,6 +67,9 @@ model Chapter {
   description  String?
   kind         ChapterKind @default(LESSON)
   videoUrl     String?
+  /// A YouTube video of this part's own, instead of an upload. The start/end
+  /// marks below apply to it too, so one long video can serve several parts.
+  youtubeId    String?
   /// When the course has a source recording, these two marks slice the part
   /// out of it instead of needing its own upload. Seconds from the start.
   startSeconds Float?
