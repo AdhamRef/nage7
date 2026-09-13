@@ -1,0 +1,368 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+model Course {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String
+  title         String
+  description   String?
+  imageUrl      String?
+  imagePublicId String?
+  price         Float?
+  /// Open to every signed-in student, no code and no fee.
+  isFree        Boolean  @default(false)
+  isPublished   Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  /// One long recording the chapters can slice into, so a whole course can
+  /// be uploaded once instead of a file per part.
+  sourceVideoUrl      String?
+  sourceVideoPublicId String?
+  sourceVideoHlsUrl   String?
+  sourceVideoThumb    String?
+  sourceVideoDuration Float?
+  /// Set instead of the Cloudinary fields when the recording lives on YouTube.
+  /// Parts still slice it by timestamp; only the player differs.
+  sourceYoutubeId     String?
+
+  chapters    Chapter[]
+  attachments Attachment[]
+  accesses    CourseAccess[]
+  groups      CourseAccessGroup[]
+
+  @@fulltext([title])
+}
+
+model Attachment {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  url          String
+  publicId     String?
+  resourceType String?
+  courseId     String   @db.ObjectId
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([courseId])
+}
+
+/// A part is either taught or tested. Assessments carry no video — just the
+/// questions — so they can stand on their own inside a course.
+enum ChapterKind {
+  LESSON
+  QUIZ
+  EXAM
+}
+
+model Chapter {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  description  String?
+  kind         ChapterKind @default(LESSON)
+  videoUrl     String?
+  /// When the course has a source recording, these two marks slice the part
+  /// out of it instead of needing its own upload. Seconds from the start.
+  startSeconds Float?
+  endSeconds   Float?
+  position     Int
+  isPublished  Boolean     @default(false)
+  isFree       Boolean     @default(false)
+  videoData    VideoData?
+  exercises    Exercise[]
+
+  courseId String @db.ObjectId
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  userProgress UserProgress[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@index([courseId])
+}
+
+model VideoData {
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  chapterId    String  @unique @db.ObjectId
+  chapter      Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  publicId     String
+  playbackUrl  String
+  hlsUrl       String?
+  thumbnailUrl String?
+  duration     Float?
+}
+
+model UserProgress {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String
+  chapterId   String  @db.ObjectId
+  chapter     Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  isCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@unique([userId, chapterId])
+  @@index([chapterId])
+}
+
+/// Which editor tab the exercise opens on.
+enum QuizEditorTab {
+  HTML
+  CSS
+  JS
+}
+
+enum QuizMatchMode {
+  CONSOLE
+  TEXT
+}
+
+/// Which runtime a coding exercise uses.
+enum ExerciseLanguage {
+  WEB
+  PYTHON
+}
+
+enum ExerciseType {
+  CODE
+  MCQ
+}
+
+/// One exercise under a chapter. Chapters can hold several, in order.
+model Exercise {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  chapterId   String       @db.ObjectId
+  chapter     Chapter      @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  type        ExerciseType @default(CODE)
+  position    Int
+  isPublished Boolean      @default(true)
+
+  question String
+  hint     String?
+
+  // --- coding exercises ---
+  language       ExerciseLanguage @default(WEB)
+  starterPython  String           @default("")
+  starterHtml    String           @default("")
+  starterCss     String           @default("")
+  starterJs      String           @default("")
+  expectedOutput String           @default("")
+  matchMode      QuizMatchMode    @default(CONSOLE)
+  caseSensitive  Boolean          @default(false)
+  defaultTab     QuizEditorTab    @default(JS)
+
+  // --- multiple choice ---
+  /// Exactly four choices when type is MCQ.
+  choices      String[]
+  correctIndex Int?
+  explanation  String?
+
+  userProgress ExerciseProgress[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([chapterId])
+}
+
+/// One row per student per exercise, so the sidebar can show how much of a
+/// part's practice is done.
+model ExerciseProgress {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String
+  exerciseId String   @db.ObjectId
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  /// True once solved correctly. Never goes back to false, so a later wrong
+  /// attempt does not erase a mark the student already earned.
+  isCompleted Boolean @default(false)
+
+  /// The most recent submission, kept so the teacher can review the work.
+  /// Which choice they picked, for a multiple-choice question.
+  choiceIndex Int?
+  /// What they wrote, for a coding question.
+  code        String?
+  /// Whether that last submission was right.
+  isCorrect   Boolean   @default(false)
+  attempts    Int       @default(0)
+  answeredAt  DateTime?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userId, exerciseId])
+  @@index([exerciseId])
+}
+
+// ---------------------------------------------------------------------------
+// NextAuth (Auth.js) models — credentials + Google OAuth
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  /// bcrypt hash — only set for email/password accounts.
+  password      String?
+
+  /// The single device this account may sign in from. Bound on first
+  /// sign-in; only a teacher can clear it.
+  deviceId      String?
+  deviceLabel   String?
+  deviceBoundAt DateTime?
+
+  accounts Account[]
+  profile  StudentProfile?
+  sessions Session[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/// A whole course the teacher has opened for a single student.
+model CourseAccess {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  courseId  String @db.ObjectId
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// What the course cost at the time, for revenue reporting.
+  paidPrice Float?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+}
+
+/// A named bundle the teacher hands out — "شهر 1", say. Every member can open
+/// every course attached to it, so a new course reaches a whole cohort at once.
+model AccessGroup {
+  id     String  @id @default(auto()) @map("_id") @db.ObjectId
+  /// The teacher who owns the group.
+  userId String
+  name   String
+  note   String?
+  /// What this bundle costs, shown on the course purchase popup.
+  price  Float?
+
+  members AccessGroupMember[]
+  courses CourseAccessGroup[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([userId])
+}
+
+/// One student's membership in a group.
+model AccessGroupMember {
+  id      String      @id @default(auto()) @map("_id") @db.ObjectId
+  groupId String      @db.ObjectId
+  group   AccessGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+/// A course a group unlocks.
+model CourseAccessGroup {
+  id       String      @id @default(auto()) @map("_id") @db.ObjectId
+  groupId  String      @db.ObjectId
+  group    AccessGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  courseId String      @db.ObjectId
+  course   Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([groupId, courseId])
+  @@index([courseId])
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNDISCLOSED
+}
+
+/// What the registration wizard collects about a student.
+model StudentProfile {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Step 1 — account details
+  fullName    String
+  gender      Gender  @default(UNDISCLOSED)
+  /// Stored in full international form, e.g. +201012345678.
+  phone       String
+  whatsapp    String
+  governorate String?
+  city        String?
+
+  // Step 2 — the guardian we contact about this student
+  guardianPhone String
+
+  // Step 3 — terms
+  acceptedTermsAt DateTime
+
+  /// Set once every step is done; the gate reads this.
+  completedAt DateTime?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([governorate])
+}

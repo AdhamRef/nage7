@@ -1,0 +1,87 @@
+.ql-container {
+  font-family: "Cairo", sans-serif;
+}
+
+.ql-editor {
+    direction: rtl;
+    text-align: right;
+    font-family: "Cairo", sans-serif;
+  }
+  
+  .ql-editor p {
+    direction: rtl;
+    text-align: right;
+    font-family: "Cairo", sans-serif;
+    margin-bottom: 1em;
+    font-size: 1.1em;
+  }
+  
+  .ql-editor h1, .ql-editor h2, .ql-editor h3, .ql-editor h4, .ql-editor h5, .ql-editor h6 {
+    color: #444;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: bold;
+    direction: rtl;
+    text-align: right;
+    font-family: "Cairo", sans-serif;
+  }
+  
+  .ql-editor h1 {
+    font-size: 2em;
+  }
+  
+  .ql-editor h2 {
+    font-size: 1.75em;
+  }
+  
+  .ql-editor h3 {
+    font-size: 1.5em;
+  }
+  
+  .ql-editor h4 {
+    font-size: 1.25em;
+  }
+  
+  .ql-editor ul, .ql-editor ol {
+    padding-left: 1.5em;
+    margin-bottom: 1em;
+    direction: rtl;
+    text-align: right;
+    font-family: "Cairo", sans-serif;
+  }
+  
+  .ql-editor ul {
+    list-style-type: square;
+  }
+  
+  .ql-editor ol {
+    list-style-type: decimal;
+  }
+  
+  .ql-editor blockquote {
+    border-right: 4px solid #ccc;
+    margin-right: 0;
+    padding-right: 1em;
+    color: #666;
+    font-style: italic;
+    direction: rtl;
+    text-align: right;
+  }
+  
+  .ql-editor a {
+    color: #007bff;
+    text-decoration: none;
+    direction: rtl;
+    text-align: right;
+  }
+  
+  .ql-editor a:hover {
+    text-decoration: underline;
+  }
+  
+  .ql-editor img {
+    max-width: 100%;
+    display: block;
+    margin: 0 auto;
+  }
+  
