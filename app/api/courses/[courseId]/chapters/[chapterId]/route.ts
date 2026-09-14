@@ -21,6 +21,12 @@ interface PatchRequest {
   [key: string]: any;
 }
 
+/** A 400 that also leaves a trace in the function log. */
+const reject = (error: string, detail: unknown) => {
+  console.warn("[CHAPTER_ID_PATCH] rejected:", error, JSON.stringify(detail));
+  return NextResponse.json({ error }, { status: 400 });
+};
+
 /** Removes the chapter's video from Cloudinary and from the database. */
 const removeExistingVideo = async (chapterId: string) => {
   const existing = await db.videoData.findUnique({ where: { chapterId } });
@@ -131,7 +137,7 @@ export async function PATCH(
     }: PatchRequest = await req.json();
 
     if (kind !== undefined && !isChapterKind(kind)) {
-      return NextResponse.json({ error: "نوع الجزء غير صحيح" }, { status: 400 });
+      return reject("نوع الجزء غير صحيح", { kind });
     }
 
     /**
@@ -153,7 +159,7 @@ export async function PATCH(
       } else {
         const youtubeId = parseYoutubeId(String(youtubeUrl));
         if (!youtubeId) {
-          return NextResponse.json({ error: "لينك يوتيوب مش صحيح" }, { status: 400 });
+          return reject("لينك يوتيوب مش صحيح", { youtubeUrl });
         }
         timing.youtubeId = youtubeId;
         await removeExistingVideo(params.chapterId);
@@ -166,16 +172,13 @@ export async function PATCH(
       const to = endSeconds === null ? null : Number(endSeconds);
 
       if (from !== null && (!Number.isFinite(from) || from < 0)) {
-        return NextResponse.json({ error: "بداية غير صحيحة" }, { status: 400 });
+        return reject("بداية غير صحيحة", { startSeconds });
       }
       if (to !== null && (!Number.isFinite(to) || to < 0)) {
-        return NextResponse.json({ error: "نهاية غير صحيحة" }, { status: 400 });
+        return reject("نهاية غير صحيحة", { endSeconds });
       }
       if (from !== null && to !== null && to <= from) {
-        return NextResponse.json(
-          { error: "وقت النهاية لازم يكون بعد البداية" },
-          { status: 400 }
-        );
+        return reject("وقت النهاية لازم يكون بعد البداية", { startSeconds, endSeconds });
       }
 
       timing.startSeconds = from;

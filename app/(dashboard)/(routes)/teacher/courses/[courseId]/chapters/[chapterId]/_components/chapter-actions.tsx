@@ -51,8 +51,9 @@ const ChapterActionsForm: React.FC<ChapterActionsProps> = ({
           }
           
           router.refresh()
-      }catch{
-          toast.error("حدث خطأ")
+      }catch(error: any){
+          // The publish route says what is missing; show that, not a shrug.
+          toast.error(error?.response?.data?.error ?? "حدث خطأ")
       }finally{
           setIsLoading(false)
       }
